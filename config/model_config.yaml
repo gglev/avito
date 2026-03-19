@@ -1,0 +1,406 @@
+# ============================================
+# КОНФИГУРАЦИЯ ML МОДЕЛЕЙ - RuBERT-large версия
+# ============================================
+
+# Настройки текстовых моделей
+text_models:
+  # RuBERT-large - основная модель (1024 эмбеддинга)
+  semantic:
+    name: "ai-forever/rubert-large"
+    type: "rubert_large"
+    size: 1024  # Размер эмбеддинга
+    max_length: 512
+    batch_size: 16
+    use_8bit: true  # Обязательно для экономии памяти!
+    cache_folder: "models/text/rubert-large"
+    
+    # Настройки для русского языка
+    language: "ru"
+    tokenizer: "DeepPavlov/rubert-base-cased"  # Совместимый токенизатор
+    
+    # Параметры для точного поиска
+    similarity_metric: "cosine"
+    normalize_embeddings: true
+    
+    # Пороги для разных типов поиска
+    thresholds:
+      exact_match: 0.85  # Для точных фраз как "издательство слово"
+      semantic: 0.65     # Для семантического поиска
+      author_match: 0.75 # Для поиска авторов
+  
+  # RuBERT-tiny для быстрого префильтра (опционально)
+  fast:
+    name: "cointegrated/rubert-tiny2"
+    size: 312
+    use_8bit: false
+    cache_folder: "models/text/rubert-tiny"
+    enabled: false  # Отключаем, используем одну мощную модель
+  
+  # NER для извлечения сущностей (на базе RuBERT)
+  ner:
+    name: "DeepPavlov/rubert-base-cased-conversational"
+    type: "ner"
+    cache_folder: "models/text/ner"
+    use_8bit: true
+    
+    # Какие сущности ищем
+    extract_entities:
+      - "PER"  # Имена (Умберто Эко)
+      - "ORG"  # Издательства (Слово, Вита Нова)
+      - "LOC"  # Места
+      - "TITLE"  # Названия книг (кастомное)
+    
+    # Веса для найденных сущностей
+    entity_weights:
+      PER: 2.0      # Авторы важнее
+      ORG: 1.5      # Издательства тоже важны
+      TITLE: 2.5    # Названия книг - максимальный вес
+  
+  # Классификатор для определения тематики
+  classifier:
+    name: "cointegrated/rubert-tiny2"  # Легкая модель для классификации
+    type: "classification"
+    cache_folder: "models/text/classifier"
+    
+    # Категории для классификации
+    categories:
+      - "fiction"           # Художественная
+      - "non_fiction"       # Научно-популярная
+      - "art"               # Искусство
+      - "rare_book"         # Редкая книга
+      - "collectible"       # Коллекционное издание
+
+# Настройки моделей для изображений
+image_models:
+  # Vision Transformer для общего анализа
+  vit:
+    name: "google/vit-large-patch16-224"
+    image_size: 224
+    use_8bit: true
+    cache_folder: "models/image/vit"
+    
+    # Извлекаем визуальные признаки
+    feature_extraction:
+      - "cover_condition"    # Состояние обложки
+      - "page_yellowness"    # Пожелтение страниц
+      - "has_dust_jacket"    # Наличие суперобложки
+      - "binding_type"       # Тип переплета
+  
+  # CLIP для сравнения текст-изображение (поддерживает русский через перевод)
+  clip:
+    name: "openai/clip-vit-large-patch14"
+    use_8bit: true
+    cache_folder: "models/image/clip"
+    
+    # Сравниваем фото с текстовыми описаниями
+    text_descriptions:
+      - "старая книга в твердом переплете"
+      - "подарочное издание в суперобложке"
+      - "книга с иллюстрациями"
+      - "библиотечный штамп на титуле"
+      - "дарственная надпись"
+      - "коллекционное состояние"
+  
+  # Детектор объектов (YOLO) для поиска штампов, автографов
+  detector:
+    name: "yolov5s"
+    confidence_threshold: 0.5
+    cache_folder: "models/image/detector"
+    
+    # Что ищем на фото
+    detect_objects:
+      - "book_stamp"        # Библиотечный штамп
+      - "autograph"         # Автограф
+      - "dust_jacket"       # Суперобложка
+      - "damaged_spine"     # Поврежденный корешок
+      - "bookplate"         # Экслибрис
+  
+  # Классификатор состояния книги (дообученный на русских книгах)
+  condition_classifier:
+    name: "models/condition_classifier.pth"  # Будем обучать сами
+    num_classes: 5
+    classes:
+      0: "excellent"    # Отличное
+      1: "good"         # Хорошее
+      2: "fair"         # Удовлетворительное
+      3: "poor"         # Плохое
+      4: "damaged"      # Поврежденное
+    
+    image_size: 224
+    backbone: "resnet50"
+
+# Настройки моделей для цен
+price_models:
+  # Основная модель - градиентный бустинг
+  gradient_boosting:
+    type: "gradient_boosting"
+    params:
+      n_estimators: 300
+      max_depth: 6
+      learning_rate: 0.05
+      subsample: 0.8
+      random_state: 42
+    
+    # Признаки для предсказания цены
+    features:
+      - "rubert_embedding"      # Эмбеддинг текста (1024)
+      - "author_score"          # Важность автора
+      - "publisher_score"       # Важность издательства
+      - "year"                  # Год издания
+      - "condition_score"       # Оценка состояния
+      - "has_dust_jacket"       # Суперобложка
+      - "has_illustrations"     # Иллюстрации
+      - "page_count"            # Количество страниц
+      - "is_rare"               # Признак редкости
+  
+  # Нейросеть для предсказания (учитывает эмбеддинги)
+  neural_network:
+    input_size: 1024 + 20  # RuBERT + мета-признаки
+    hidden_layers: [512, 256, 128]
+    activation: "relu"
+    dropout: 0.3
+    learning_rate: 0.001
+    batch_size: 32
+    
+    # Архитектура
+    architecture:
+      - type: "linear"
+        units: 512
+        activation: "relu"
+        dropout: 0.2
+      - type: "linear"
+        units: 256
+        activation: "relu"
+        dropout: 0.2
+      - type: "linear"
+        units: 128
+        activation: "relu"
+      - type: "linear"
+        units: 1  # Выход - цена
+  
+  # Веса для ансамбля
+  weights:
+    gradient_boosting: 0.6
+    neural_network: 0.4
+
+# Классификатор интересности книги
+classifier:
+  type: "gradient_boosting"
+  params:
+    n_estimators: 200
+    max_depth: 5
+    random_state: 42
+  
+  # Входные признаки (комбинация всех моделей)
+  input_features:
+    - "text_similarity"      # Сходство с запросом (RuBERT)
+    - "author_match_score"   # Совпадение автора (NER)
+    - "publisher_match_score" # Совпадение издательства
+    - "image_quality_score"  # Качество по фото
+    - "condition_score"      # Состояние
+    - "price_score"          # Соответствие цены
+    - "rare_features_score"  # Признаки редкости
+    - "clip_similarity"      # Визуальное сходство
+  
+  # Порог для определения "интересная книга"
+  threshold: 0.65
+
+# ============================================
+# НАСТРОЙКИ ОБУЧЕНИЯ
+# ============================================
+training:
+  random_seed: 42
+  validation_split: 0.2
+  test_split: 0.1
+  
+  # Для RuBERT (тонкая настройка)
+  rubert:
+    batch_size: 8  # Меньше из-за размера
+    epochs: 10
+    learning_rate: 2e-5
+    optimizer: "adamw"
+    warmup_steps: 500
+    weight_decay: 0.01
+    
+    # Заморозка слоев для экономии
+    freeze_layers: 20  # Заморозить первые 20 слоев из 24
+  
+  # Для нейросети цен
+  neural:
+    batch_size: 32
+    epochs: 50
+    learning_rate: 0.001
+    optimizer: "adamw"
+    scheduler: "cosine"
+    early_stopping_patience: 10
+    
+    # Аугментация данных
+    augmentation:
+      enabled: true
+      noise: 0.01
+      mixup: 0.2  # MixUp аугментация
+  
+  # Кросс-валидация
+  cv:
+    folds: 5
+    shuffle: true
+    scoring: "f1_weighted"
+
+# ============================================
+# ИЗВЛЕЧЕНИЕ ПРИЗНАКОВ
+# ============================================
+features:
+  # Текстовые признаки на основе RuBERT
+  text:
+    # Основные эмбеддинги (1024)
+    embeddings:
+      source: "rubert"
+      pooling: "cls"  # Используем [CLS] токен
+      normalize: true
+    
+    # TF-IDF для точного совпадения
+    exact_match:
+      enabled: true
+      ngram_range: [1, 4]  # Фразы до 4 слов
+      max_features: 5000
+      min_df: 1
+      
+      # Специальные веса для важных фраз
+      phrases:
+        - text: "издательство слово"
+          weight: 3.0
+        - text: "вита нова"
+          weight: 3.0
+        - text: "умберто эко"
+          weight: 2.5
+        - text: "история красоты"
+          weight: 2.5
+    
+    # Веса для разных частей текста
+    weights:
+      title: 0.5
+      description: 0.3
+      publisher: 0.2
+    
+    # Бусты для ключевых паттернов
+    boosts:
+      - pattern: "издательство (слово|slovo|вита нова|vita nova)"
+        boost: 2.5
+      - pattern: "(умберто|umberto) эко"
+        boost: 2.0
+      - pattern: "(подарочное|коллекционное|редкое) издание"
+        boost: 1.8
+  
+  # Визуальные признаки
+  image:
+    # Глубокие признаки из ViT
+    deep_features:
+      enabled: true
+      dimension: 768
+      normalize: true
+    
+    # Признаки состояния
+    condition_features:
+      - "cover_wear"          # Потертости обложки
+      - "spine_damage"        # Повреждения корешка
+      - "page_yellowness"     # Пожелтение
+      - "has_stamps"          # Наличие штампов
+      - "has_autographs"      # Наличие автографов
+    
+    # Признаки качества фото
+    quality:
+      min_resolution: [500, 500]
+      check_blur: true
+      check_brightness: true
+
+# ============================================
+# ОПТИМИЗАЦИЯ ПАМЯТИ
+# ============================================
+memory:
+  # 8-bit quantization для RuBERT-large (критически важно!)
+  use_8bit: true
+  quantization_config:
+    load_in_8bit: true
+    llm_int8_threshold: 6.0
+    llm_int8_has_fp16_weight: false
+  
+  # Смешанная точность
+  use_mixed_precision: true
+  fp16: true
+  
+  # Распределение по устройствам
+  device_map: "auto"
+  
+  # Выгрузка на диск редко используемых моделей
+  offload:
+    enabled: true
+    folder: "models/offload"
+    threshold: 0.3  # Выгружать если используется реже 30%
+  
+  # Лимиты памяти
+  max_memory:
+    cuda: "24GB"  # Если есть GPU
+    cpu: "32GB"   # Ваш лимит
+  
+  # Кэширование эмбеддингов
+  cache:
+    enabled: true
+    max_size: 5000  # Кэшировать 5000 эмбеддингов
+    backend: "disk"  # Хранить на диске
+    compress: true   # Сжимать
+  
+  # Градиентные чекпоинты (экономия памяти при обучении)
+  gradient_checkpointing: true
+
+# ============================================
+# ЛОГИРОВАНИЕ
+# ============================================
+logging:
+  level: "INFO"
+  save_embeddings: false
+  log_every: 10
+  
+  # Отслеживаемые метрики
+  metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1"
+    - "mse"
+    - "mae"
+  
+  # Визуализация эмбеддингов (TensorBoard)
+  tensorboard:
+    enabled: true
+    log_dir: "logs/tensorboard"
+    histogram_freq: 10
+
+# ============================================
+# ПРОДВИНУТЫЕ НАСТРОЙКИ
+# ============================================
+advanced:
+  # Использовать GPU если доступен
+  use_gpu: true
+  
+  # Количество потоков CPU
+  num_threads: 8
+  
+  # Таймауты
+  download_timeout: 600  # 10 минут на скачивание RuBERT
+  inference_timeout: 30
+  
+  # Ретри при ошибках
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+  
+  # Batch processing
+  batch_processing:
+    enabled: true
+    max_batch_size: 32
+    queue_size: 100
+  
+  # Профилирование
+  profiling:
+    enabled: false
+    save_timings: true
